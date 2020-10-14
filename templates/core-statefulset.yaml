@@ -1,3 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ template "neo4j.core.fullname" . }}neo4j-config"
+data:
+  dbms.tx_state.memory_allocation: ON_HEAP
+  dbms.connector.bolt.enabled: "true"
+  dbms.connector.http.enabled: "true"
+  dbms.connector.https.enabled: "false"
+---
+
 apiVersion: "apps/v1"
 kind: StatefulSet
 metadata:
@@ -46,6 +57,9 @@ spec:
       - name: {{ template "neo4j.fullname" . }}
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
         imagePullPolicy: "{{ .Values.imagePullPolicy }}"
+        securityContext:
+          runAsUser: 7474
+          runAsGroup: 7474
         envFrom:
           - configMapRef:
               name: {{ template "neo4j.commonConfig.fullname" . }}
@@ -67,7 +81,9 @@ spec:
                 name: {{ template "neo4j.secrets.fullname" . }}
                 {{- end}}
                 key: neo4j-password
-          {{- end }}      
+          {{- end }}
+          - name: NEO4J_CONF
+            value: /var/lib/neo4j/new-conf/
         command:
           - "/bin/bash"
           - "-c"
@@ -112,6 +128,8 @@ spec:
           name: tcp-jmx
         {{- end }}
         volumeMounts:
+        - name: config-volume
+          mountPath: /var/lib/neo4j/new-conf/neo4j.conf
         - name: init-script
           mountPath: /helm-init
         - name: datadir
@@ -147,8 +165,11 @@ spec:
 {{ toYaml .Values.core.initContainers | indent 6 }}
 {{- end }}
       volumes:
+        - name: config-volume
+          configMap:
+            name: "{{ template "neo4j.core.fullname" . }}neo4j-config"
         - name: init-script
-          configMap: 
+          configMap:
             name: "{{ .Release.Name }}-init-script"
         {{- if .Values.restoreSecret }}
         - name: creds
